@@ -1,4 +1,4 @@
-# LDIS (Large Data Inspection System)
+# LDIS (Leaked Data Instant Search)
 
 **LDIS** is a high-performance, secure web application designed to query, inspect, and preview large OCR datasets. It integrates **Elasticsearch** for indexing and searching document structures/text, and uses **S3-compatible object storage** (such as **RustFS** or MinIO) for dynamic asset retrieval.
 

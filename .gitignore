@@ -1,0 +1,66 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build & Release
+dist/
+dist-ssr/
+build/
+out/
+*.tsbuildinfo
+vite.config.ts.timestamp-*
+
+# Caches
+.npm
+.eslintcache
+.stylelintcache
+.vite/
+.drm_cache/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# IDE & Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+.vs/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Project specific
+server.js
+coverage/
+.vercel/
+.netlify/
+rustfs-dev/
+bin/

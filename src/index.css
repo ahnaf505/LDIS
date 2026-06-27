@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;600;700;900&family=JetBrains+Mono:wght@400;450;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #003b73;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #0056a6;
+  --color-on-primary-container: #e6f0ff;
+  --color-primary-fixed: #d6e3ff;
+  --color-primary-fixed-dim: #a8c8ff;
+  --color-on-primary-fixed: #001b3d;
+  --color-on-primary-fixed-variant: #003b73;
+  --color-inverse-primary: #a8c8ff;
+  
+  --color-secondary: #435266;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #dbe6f7;
+  --color-on-secondary-container: #344155;
+  --color-secondary-fixed: #dbe6f7;
+  --color-secondary-fixed-dim: #b7c5d8;
+  --color-on-secondary-fixed: #0d1c2e;
+  --color-on-secondary-fixed-variant: #3a485b;
+  
+  --color-tertiary: #005338;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #006e4b;
+  --color-on-tertiary-container: #67f4b7;
+  --color-tertiary-fixed: #6ffbbe;
+  --color-tertiary-fixed-dim: #4edea3;
+  --color-on-tertiary-fixed: #002113;
+  --color-on-tertiary-fixed-variant: #005236;
+  
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+  
+  --color-background: #f3f6fa;
+  --color-on-background: #191c1e;
+  
+  --color-surface: #fdfefe;
+  --color-on-surface: #191c1e;
+  --color-surface-variant: #d7dde4;
+  --color-on-surface-variant: #2f3742;
+  --color-surface-bright: #ffffff;
+  --color-surface-dim: #d1d6de;
+  --color-surface-tint: #003b73;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eef2f6;
+  --color-surface-container: #e6ebf1;
+  --color-surface-container-high: #dde4ec;
+  --color-surface-container-highest: #d5dde7;
+  
+  --color-outline: #596372;
+  --color-outline-variant: #b3bcc9;
+  
+  --color-inverse-surface: #2d3133;
+  --color-inverse-on-surface: #eff1f3;
+  
+  --font-headline-lg: "Inter", sans-serif;
+  --font-headline-md: "Inter", sans-serif;
+  --font-body-md: "Inter", sans-serif;
+  --font-body-sm: "Inter", sans-serif;
+  --font-label-caps: "Inter", sans-serif;
+  --font-code-sm: "JetBrains Mono", monospace;
+
+  --spacing-margin-desktop: 24px;
+  --spacing-margin-mobile: 12px;
+  --spacing-gutter: 16px;
+  --spacing-unit: 4px;
+  --spacing-table-row-height: 40px;
+  --spacing-toolbar-height: 56px;
+}
+
+body {
+  @apply bg-background text-on-background font-body-md;
+}

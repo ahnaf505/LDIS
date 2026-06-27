@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Filter, SortAsc, X, FileArchive, Folder, FolderX, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2 } from "lucide-react";
+import { FileArchive, Folder, FolderX, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 
@@ -119,30 +119,6 @@ export function BatchesView() {
           <h2 className="font-headline-lg text-[24px] font-bold text-on-surface">Datasets</h2>
           <p className="font-body-sm text-[12px] text-on-surface-variant mt-1">Manage and monitor document processing jobs.</p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant rounded-none font-body-sm text-[12px] hover:bg-surface-container-low transition-colors bg-surface">
-            <Filter size={16} />
-            Filter
-          </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 border border-outline-variant rounded-none font-body-sm text-[12px] hover:bg-surface-container-low transition-colors bg-surface">
-            <SortAsc size={16} />
-            Sort
-          </button>
-        </div>
-      </div>
-
-      <div className="flex gap-2 mb-4 flex-wrap">
-        <div className="px-3 py-1 bg-surface-container-high border border-outline-variant rounded-none font-body-sm text-[12px] flex items-center gap-1 cursor-pointer hover:bg-surface-variant transition-colors">
-          <span>Status: Processing</span>
-          <X size={14} />
-        </div>
-        <div className="px-3 py-1 bg-surface-container-high border border-outline-variant rounded-none font-body-sm text-[12px] flex items-center gap-1 cursor-pointer hover:bg-surface-variant transition-colors">
-          <span>Date: Last 7 Days</span>
-          <X size={14} />
-        </div>
-        <button className="px-3 py-1 font-body-sm text-[12px] text-primary hover:underline">
-          Clear All
-        </button>
       </div>
 
       <div className="bg-surface-container-lowest border border-outline-variant rounded-none overflow-hidden shadow-sm flex flex-col flex-1">

@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { getS3Object, putS3Object } from "../services/s3";
+import { requestElasticsearch } from "../services/elasticsearch";
 
 export const s3Router = Router();
 
@@ -22,6 +23,33 @@ function getS3StatusCode(error: unknown) {
   }
 
   return 502;
+}
+
+async function requireUploadToken(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) {
+  const bucket = req.params.bucket;
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing or invalid Authorization header. Use: Authorization: Bearer <token>" });
+    return;
+  }
+  const token = auth.slice(7);
+  try {
+    const result = await requestElasticsearch<any>("/upload_token/_search", {
+      method: "POST",
+      body: {
+        query: { bool: { must: [{ term: { "bucket.keyword": bucket } }, { term: { "token.keyword": token } }, { term: { active: true } }] } },
+        size: 1,
+      },
+    });
+    if (!result.hits?.hits?.length) {
+      res.status(403).json({ error: "Invalid or revoked upload token. Generate a new one from the dataset upload panel." });
+      return;
+    }
+  } catch {
+    res.status(500).json({ error: "Failed to verify upload token" });
+    return;
+  }
+  next();
 }
 
 s3Router.get("/:bucket/*", async (req, res, next) => {
@@ -73,7 +101,7 @@ s3Router.get("/:bucket/*", async (req, res, next) => {
   }
 });
 
-s3Router.put("/:bucket/*", async (req, res, next) => {
+s3Router.put("/:bucket/*", requireUploadToken, async (req, res, next) => {
   const bucket = req.params.bucket;
   const key = req.params[0];
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { FileArchive, Folder, FolderX, Upload, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2, Plus, X, Terminal, FileCode } from "lucide-react";
+import { FileArchive, Folder, FolderX, Upload, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2, Plus, X, Terminal, FileCode, RefreshCw, XCircle } from "lucide-react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
+import { CodeBlock } from "../components/CodeBlock";
 
 type InitiatedBy = {
   initials: string;
@@ -30,6 +31,7 @@ function buf2hex(buffer: ArrayBuffer) {
 }
 
 export function BatchesView() {
+  const origin = window.location.origin;
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,12 +49,20 @@ export function BatchesView() {
   const [newDescription, setNewDescription] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const unixPreRef = useRef<HTMLPreElement>(null);
+  const winPreRef = useRef<HTMLPreElement>(null);
+  const pyPreRef = useRef<HTMLPreElement>(null);
 
   // Upload Modal States
   const [uploadTarget, setUploadTarget] = useState<Dataset | null>(null);
   const [uploadTab, setUploadTab] = useState<"web" | "curl" | "python">("web");
   const [fileQueue, setFileQueue] = useState<Array<{ file: File; key: string; status: "queued" | "uploading" | "success" | "failed"; error?: string }>>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadToken, setUploadToken] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+  const [curlPlatform, setCurlPlatform] = useState<"unix" | "win">("unix");
 
   const addFilesToQueue = (files: FileList, flatten = false) => {
     const entries = Array.from(files).map((f) => ({
@@ -65,12 +75,16 @@ export function BatchesView() {
 
   const processQueue = async () => {
     setIsUploading(true);
+    let token = uploadToken;
+    if (!token) token = await generateToken();
+    const authHeader = token ? { "Authorization": `Bearer ${token}` } : {};
     const queue = fileQueue.filter((e) => e.status === "queued");
     for (const entry of queue) {
       setFileQueue((prev) => prev.map((e) => e.file === entry.file ? { ...e, status: "uploading" as const } : e));
       try {
         const res = await fetch(`/api/s3/${encodeURIComponent(uploadTarget!.id)}/${encodeURIComponent(entry.key)}`, {
           method: "PUT",
+          headers: authHeader,
           body: entry.file,
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -103,7 +117,57 @@ export function BatchesView() {
     if (isUploading) return;
     setFileQueue([]);
     setUploadTarget(null);
+    setUploadToken(null);
   };
+
+  const loadToken = async (): Promise<boolean> => {
+    if (!uploadTarget) return false;
+    setTokenLoading(true);
+    try {
+      const res = await fetch(`/api/upload-tokens/${encodeURIComponent(uploadTarget.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUploadToken(data.token);
+        return !!data.token;
+      }
+    } catch {} finally {
+      setTokenLoading(false);
+    }
+    return false;
+  };
+
+  const generateToken = async () => {
+    if (!uploadTarget) return null;
+    setTokenLoading(true);
+    try {
+      const res = await fetch(`/api/upload-tokens/${encodeURIComponent(uploadTarget.id)}`, { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setUploadToken(data.token);
+        return data.token as string;
+      }
+    } catch {} finally {
+      setTokenLoading(false);
+    }
+    return null;
+  };
+
+  const revokeToken = async () => {
+    if (!uploadTarget) return;
+    setTokenLoading(true);
+    try {
+      await fetch(`/api/upload-tokens/${encodeURIComponent(uploadTarget.id)}`, { method: "DELETE" });
+      setUploadToken(null);
+    } catch {} finally {
+      setTokenLoading(false);
+    }
+  };
+
+  // Load or auto-generate token when switching to curl or python tab
+  useEffect(() => {
+    if (!uploadTarget || (uploadTab !== "curl" && uploadTab !== "python")) return;
+    loadToken().then((found) => { if (!found) generateToken(); });
+  }, [uploadTab, uploadTarget?.id]);
 
   useEffect(() => {
     if (!createError) return;
@@ -611,29 +675,90 @@ export function BatchesView() {
               )}
               {uploadTab === "curl" && (
                 <div className="space-y-3">
-                  <p className="text-[12px] text-on-surface-variant">Upload files using cURL:</p>
-                  <pre className="bg-surface-container-low border border-outline-variant p-4 text-[12px] font-mono text-on-surface overflow-x-auto whitespace-pre-wrap">
-{`curl -X PUT \\
-  http://localhost:3000/api/s3/${uploadTarget.id}/your-file.jpg \\
-  -H "Content-Type: image/jpeg" \\
-  --data-binary @your-file.jpg`}
-                  </pre>
+                  {uploadToken && (
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-surface-container-low border border-outline-variant">
+                      <span className="text-[11px] font-bold text-outline uppercase tracking-wider shrink-0">Token</span>
+                      <code className="flex-1 text-[12px] font-mono text-on-surface truncate select-all">{uploadToken}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(uploadToken); setTokenCopied(true); setTimeout(() => setTokenCopied(false), 2000); }} className="text-[11px] font-bold text-primary hover:underline shrink-0">{tokenCopied ? "Copied" : "Copy"}</button>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] text-on-surface-variant">Upload files using cURL:</p>
+                    <div className="flex gap-2 shrink-0">
+                      {uploadToken ? (
+                        <>
+                          <button onClick={generateToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-outline-variant hover:bg-surface-container-low transition-colors text-[11px] font-bold text-on-surface disabled:opacity-40">
+                            <RefreshCw size={12} className={tokenLoading ? "animate-spin" : ""} /> Regenerate
+                          </button>
+                          <button onClick={revokeToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-error/40 hover:bg-error-container/10 transition-colors text-[11px] font-bold text-error disabled:opacity-40">
+                            <XCircle size={12} /> Revoke
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={generateToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container transition-colors text-[11px] font-bold disabled:opacity-40">
+                          <RefreshCw size={12} className={tokenLoading ? "animate-spin" : ""} /> Generate Token
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex border border-outline-variant bg-surface-container-lowest">
+                    <button onClick={() => setCurlPlatform("unix")} className={`flex-1 py-2 text-[11px] font-bold tracking-wider uppercase transition-all ${curlPlatform === "unix" ? "bg-surface text-primary border-b-2 border-primary" : "text-on-surface-variant hover:text-on-surface"}`}>macOS / Linux</button>
+                    <button onClick={() => setCurlPlatform("win")} className={`flex-1 py-2 text-[11px] font-bold tracking-wider uppercase transition-all ${curlPlatform === "win" ? "bg-surface text-primary border-b-2 border-primary" : "text-on-surface-variant hover:text-on-surface"}`}>PowerShell</button>
+                  </div>
+                  {curlPlatform === "unix" ? (
+                    <div className="relative">
+                      <button
+                        onClick={() => { if (unixPreRef.current) { navigator.clipboard.writeText(unixPreRef.current.textContent || ""); setCopiedLabel("unix"); setTimeout(() => setCopiedLabel(null), 2000); } }}
+                        className="absolute top-2 right-2 text-[10px] font-bold text-primary hover:underline z-10"
+                      >{copiedLabel === "unix" ? "Copied" : "Copy"}</button>
+                      <CodeBlock ref={unixPreRef} language="bash" code={`FILE="your-file.jpg"\ncurl -X PUT \\\n  ${origin}/api/s3/${uploadTarget.id}/"$FILE" \\\n  -H "Authorization: Bearer ${uploadToken || "<your-token>"}" \\\n  -H "Content-Type: \${FILE##*.}" \\\n  --data-binary @"$FILE"`} />
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <button
+                        onClick={() => { if (winPreRef.current) { navigator.clipboard.writeText(winPreRef.current.textContent || ""); setCopiedLabel("win"); setTimeout(() => setCopiedLabel(null), 2000); } }}
+                        className="absolute top-2 right-2 text-[10px] font-bold text-primary hover:underline z-10"
+                      >{copiedLabel === "win" ? "Copied" : "Copy"}</button>
+                      <CodeBlock ref={winPreRef} language="powershell" code={`$FILE = "your-file.jpg"\ncurl.exe -X PUT "${origin}/api/s3/${uploadTarget.id}/$FILE" -H "Authorization: Bearer ${uploadToken || "<your-token>"}" -H "Content-Type: image/jpeg" --data-binary "@$FILE"`} />
+                    </div>
+                  )}
                 </div>
               )}
               {uploadTab === "python" && (
                 <div className="space-y-3">
-                  <p className="text-[12px] text-on-surface-variant">Upload files using Python:</p>
-                  <pre className="bg-surface-container-low border border-outline-variant p-4 text-[12px] font-mono text-on-surface overflow-x-auto whitespace-pre-wrap">
-{`import requests
-
-url = "http://localhost:3000/api/s3/${uploadTarget.id}/your-file.jpg"
-headers = {"Content-Type": "image/jpeg"}
-
-with open("your-file.jpg", "rb") as f:
-    resp = requests.put(url, data=f, headers=headers)
-
-print(resp.status_code)`}
-                  </pre>
+                  {uploadToken && (
+                    <div className="flex items-center gap-3 px-4 py-2.5 bg-surface-container-low border border-outline-variant">
+                      <span className="text-[11px] font-bold text-outline uppercase tracking-wider shrink-0">Token</span>
+                      <code className="flex-1 text-[12px] font-mono text-on-surface truncate select-all">{uploadToken}</code>
+                      <button onClick={() => { navigator.clipboard.writeText(uploadToken); setTokenCopied(true); setTimeout(() => setTokenCopied(false), 2000); }} className="text-[11px] font-bold text-primary hover:underline shrink-0">{tokenCopied ? "Copied" : "Copy"}</button>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[12px] text-on-surface-variant">Upload files using Python:</p>
+                    <div className="flex gap-2 shrink-0">
+                      {uploadToken ? (
+                        <>
+                          <button onClick={generateToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-outline-variant hover:bg-surface-container-low transition-colors text-[11px] font-bold text-on-surface disabled:opacity-40">
+                            <RefreshCw size={12} className={tokenLoading ? "animate-spin" : ""} /> Regenerate
+                          </button>
+                          <button onClick={revokeToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 border border-error/40 hover:bg-error-container/10 transition-colors text-[11px] font-bold text-error disabled:opacity-40">
+                            <XCircle size={12} /> Revoke
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={generateToken} disabled={tokenLoading} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container transition-colors text-[11px] font-bold disabled:opacity-40">
+                          <RefreshCw size={12} className={tokenLoading ? "animate-spin" : ""} /> Generate Token
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => { if (pyPreRef.current) { navigator.clipboard.writeText(pyPreRef.current.textContent || ""); setCopiedLabel("py"); setTimeout(() => setCopiedLabel(null), 2000); } }}
+                      className="absolute top-2 right-2 text-[10px] font-bold text-primary hover:underline z-10"
+                    >{copiedLabel === "py" ? "Copied" : "Copy"}</button>
+                    <CodeBlock ref={pyPreRef} language="python" code={`import requests\n\nFILE = "your-file.jpg"\nurl = f"${origin}/api/s3/${uploadTarget.id}/{FILE}"\nheaders = {\n    "Authorization": "Bearer ${uploadToken || "<your-token>"}",\n}\n\nwith open(FILE, "rb") as f:\n    resp = requests.put(url, data=f, headers=headers)\n\nprint(resp.status_code)`} />
+                  </div>
                 </div>
               )}
             </div>

@@ -148,12 +148,25 @@ export class DatasetsController {
   static async syncCount(req: Request, res: Response, next: NextFunction) {
     try {
       const { bucket } = req.params;
-      const data = await listS3Bucket(bucket, undefined, 1000);
-      const count = data.KeyCount ?? data.Contents?.length ?? 0;
-      await requestElasticsearch(`/datasets_metadata/_doc/${encodeURIComponent(bucket)}/_update`, {
-        method: "POST",
-        body: { doc: { docs: count } },
-      });
+      let count = 0;
+      try {
+        const data = await listS3Bucket(bucket, undefined, 1000);
+        count = data.KeyCount ?? data.Contents?.length ?? 0;
+      } catch {
+        // bucket unreachable or doesn't exist — count stays 0
+      }
+      try {
+        await requestElasticsearch(`/datasets_metadata/_update/${encodeURIComponent(bucket)}`, {
+          method: "POST",
+          body: { doc: { docs: count } },
+        });
+      } catch {
+        // metadata doc doesn't exist yet — upsert instead
+        await requestElasticsearch(`/datasets_metadata/_doc/${encodeURIComponent(bucket)}`, {
+          method: "PUT",
+          body: { bucket, docs: count, status: "ready for query" },
+        });
+      }
       res.json({ bucket, docs: count });
     } catch (error) {
       next(error);

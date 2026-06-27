@@ -80,7 +80,7 @@ export class DatasetsController {
           desc: description || "",
           bucket: sanitized,
           index: sanitized,
-          status: "active",
+          status: "ready for query",
           docs: 0,
           date: new Date().toISOString().split("T")[0],
           type: "folder",
@@ -140,6 +140,21 @@ export class DatasetsController {
         method: "DELETE"
       });
       res.status(200).send("Dataset deleted successfully");
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async syncCount(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { bucket } = req.params;
+      const data = await listS3Bucket(bucket, undefined, 1000);
+      const count = data.KeyCount ?? data.Contents?.length ?? 0;
+      await requestElasticsearch(`/datasets_metadata/_doc/${encodeURIComponent(bucket)}/_update`, {
+        method: "POST",
+        body: { doc: { docs: count } },
+      });
+      res.json({ bucket, docs: count });
     } catch (error) {
       next(error);
     }

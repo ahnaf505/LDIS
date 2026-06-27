@@ -7,9 +7,6 @@ export function Topbar() {
         {/* Search input removed as requested */}
       </div>
       <div className="flex items-center gap-4 ml-4">
-        <button className="bg-primary text-on-primary px-4 py-1.5 rounded-none font-headline-md text-[14px] hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm whitespace-nowrap hidden sm:block">
-          New Dataset
-        </button>
         <div className="flex items-center gap-2 text-on-surface-variant">
           <button className="p-1.5 rounded-none hover:bg-surface-container-high transition-colors">
             <Bell size={20} />

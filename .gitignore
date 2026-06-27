@@ -64,3 +64,4 @@ coverage/
 .netlify/
 rustfs-dev/
 bin/
+.claude

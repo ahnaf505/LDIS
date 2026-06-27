@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FileArchive, Folder, FolderX, Upload, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2, Plus, X } from "lucide-react";
+import { FileArchive, Folder, FolderX, Upload, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2, Plus, X, Terminal, FileCode } from "lucide-react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 
@@ -15,6 +15,7 @@ type Dataset = {
   status: string;
   progress: number;
   docs: number;
+  bucket?: string;
   initiatedBy: InitiatedBy;
   date: string;
   type: string;
@@ -46,6 +47,63 @@ export function BatchesView() {
   const [newDescription, setNewDescription] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
+
+  // Upload Modal States
+  const [uploadTarget, setUploadTarget] = useState<Dataset | null>(null);
+  const [uploadTab, setUploadTab] = useState<"web" | "curl" | "python">("web");
+  const [fileQueue, setFileQueue] = useState<Array<{ file: File; key: string; status: "queued" | "uploading" | "success" | "failed"; error?: string }>>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const addFilesToQueue = (files: FileList, flatten = false) => {
+    const entries = Array.from(files).map((f) => ({
+      file: f,
+      key: flatten ? f.name : f.name,
+      status: "queued" as const,
+    }));
+    setFileQueue((prev) => [...prev, ...entries]);
+  };
+
+  const processQueue = async () => {
+    setIsUploading(true);
+    const queue = fileQueue.filter((e) => e.status === "queued");
+    for (const entry of queue) {
+      setFileQueue((prev) => prev.map((e) => e.file === entry.file ? { ...e, status: "uploading" as const } : e));
+      try {
+        const res = await fetch(`/api/s3/${encodeURIComponent(uploadTarget!.id)}/${encodeURIComponent(entry.key)}`, {
+          method: "PUT",
+          body: entry.file,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setFileQueue((prev) => prev.map((e) => e.file === entry.file ? { ...e, status: "success" as const } : e));
+      } catch (err: any) {
+        setFileQueue((prev) => prev.map((e) => e.file === entry.file ? { ...e, status: "failed" as const, error: err.message } : e));
+      }
+    }
+    setIsUploading(false);
+    const successCount = fileQueue.filter((e) => e.status === "success").length;
+    if (successCount > 0) {
+      try {
+        const syncRes = await fetch(`/api/datasets/${encodeURIComponent(uploadTarget!.id)}/sync-count`, { method: "POST" });
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          setDatasets((prev) => prev.map((d) => d.id === uploadTarget!.id ? { ...d, docs: syncData.docs } : d));
+        }
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    if (!isUploading) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isUploading]);
+
+  const closeUpload = () => {
+    if (isUploading) return;
+    setFileQueue([]);
+    setUploadTarget(null);
+  };
 
   useEffect(() => {
     if (!createError) return;
@@ -91,6 +149,18 @@ export function BatchesView() {
         const decodedText = new TextDecoder().decode(rawBuffer);
         const data = JSON.parse(decodedText);
         setDatasets(data);
+
+        // Refresh doc counts for datasets with their own bucket
+        for (const d of data) {
+          if (d.bucket) {
+            fetch(`/api/datasets/${encodeURIComponent(d.bucket)}/sync-count`, { method: "POST" })
+              .then((r) => r.json() as any)
+              .then((result) => {
+                setDatasets((prev) => prev.map((x) => x.id === d.id ? { ...x, docs: result.docs } : x));
+              })
+              .catch(() => {});
+          }
+        }
       } catch (err: any) {
         setError(err.message || "An error occurred");
       } finally {
@@ -155,7 +225,7 @@ export function BatchesView() {
       setDatasets((prev) => [...prev, {
         id: created.id,
         name: created.name,
-        status: "active",
+        status: "ready for query",
         progress: 100,
         docs: 0,
         initiatedBy: { initials: "ME", name: "Me", color: "#3B82F6" },
@@ -165,6 +235,21 @@ export function BatchesView() {
       setShowNewDataset(false);
     } catch (err: any) {
       setCreateError(err.message || "An error occurred.");
+    }
+  };
+
+  const handleUploadFile = async (file: File, key?: string) => {
+    if (!uploadTarget) return;
+    const objectKey = key || file.name;
+    try {
+      const res = await fetch(`/api/s3/${encodeURIComponent(uploadTarget.id)}/${encodeURIComponent(objectKey)}`, {
+        method: "PUT",
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Upload failed for ${objectKey}`);
+      setUploadTarget(null);
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -205,13 +290,14 @@ export function BatchesView() {
                   </th>
                   <th className="px-4 py-3 font-label-caps text-[11px] font-bold text-outline uppercase tracking-wider">Dataset Name</th>
                   <th className="px-4 py-3 font-label-caps text-[11px] font-bold text-outline uppercase tracking-wider">Documents</th>
+                  <th className="px-4 py-3 font-label-caps text-[11px] font-bold text-outline uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 font-label-caps text-[11px] font-bold text-outline uppercase tracking-wider">Created Date</th>
                   <th className="px-4 py-3 font-label-caps text-[11px] font-bold text-outline uppercase tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="font-body-md text-[14px] divide-y divide-outline-variant">
                 {datasets.map((batch) => (
-                  <tr key={batch.id} className={clsx("hover:bg-surface-container-low transition-colors group h-[40px]", batch.status === "Failed" && "bg-error-container/10")}>
+                  <tr key={batch.id} className="hover:bg-surface-container-low transition-colors group h-[40px]">
                     <td className="px-4 py-2">
                       <input type="checkbox" className="rounded-none border-outline-variant text-primary focus:ring-primary bg-surface h-4 w-4" />
                     </td>
@@ -223,11 +309,21 @@ export function BatchesView() {
                         <Link to={`/batches/${batch.id}`} className="hover:underline">{batch.name}</Link>
                       </div>
                     </td>
-                    <td className="px-4 py-2 font-code-sm text-[12px] text-on-surface-variant tabular-nums">{batch.docs.toLocaleString()}</td>
+                    <td className="px-4 py-2 font-code-sm text-[12px] text-on-surface-variant tabular-nums">{batch.docs?.toLocaleString() ?? "0"}</td>
+                    <td className="px-4 py-2">
+                      <span className={clsx(
+                        "inline-block px-2 py-0.5 text-[11px] font-semibold border",
+                        batch.status?.toLowerCase() === "ready for query"
+                          ? "text-tertiary border-tertiary/40 bg-tertiary-container/10"
+                          : "text-on-surface-variant border-outline-variant bg-surface-container-low"
+                      )}>
+                        {batch.status?.toLowerCase() === "ready for query" ? "Ready for query" : "Unknown"}
+                      </span>
+                    </td>
                     <td className="px-4 py-2 font-code-sm text-[12px] text-on-surface-variant">{batch.date}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-1">
-                        <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Upload"><Upload size={18} /></button>
+                        <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Upload" onClick={() => { setUploadTarget(batch); setUploadTab("web"); }}><Upload size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Download"><Download size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="View"><Eye size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Data Details"><Database size={18} /></button>
@@ -384,6 +480,172 @@ export function BatchesView() {
                 className="px-4 py-2 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container disabled:opacity-40 transition-colors text-[12px] font-bold"
               >
                 Create Dataset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Upload Modal */}
+      {uploadTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={isUploading ? undefined : closeUpload}>
+          <div className="bg-surface border border-outline-variant w-full max-w-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
+              <div>
+                <h3 className="font-headline-lg text-[18px] font-bold text-on-surface">Upload to {uploadTarget.name}</h3>
+                <p className="text-[12px] text-on-surface-variant mt-0.5">Choose your upload method.</p>
+              </div>
+              <button onClick={isUploading ? undefined : closeUpload} className="p-1.5 hover:bg-surface-container-high rounded-none text-outline transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Tab Bar */}
+            <div className="flex border-b border-outline-variant bg-surface-container-lowest">
+              {(["web", "curl", "python"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setUploadTab(tab)}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 text-[12px] font-bold tracking-wider uppercase border-b-2 transition-all ${
+                    uploadTab === tab
+                      ? "border-primary text-primary bg-surface"
+                      : "border-transparent text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low"
+                  }`}
+                >
+                  {tab === "web" && <Upload size={14} />}
+                  {tab === "curl" && <Terminal size={14} />}
+                  {tab === "python" && <FileCode size={14} />}
+                  {tab === "web" ? "Web Upload" : tab === "curl" ? "cURL" : "Python"}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab Content */}
+            <div className="px-6 py-5 max-h-[60vh] overflow-y-auto">
+              {uploadTab === "web" && (
+                <div className="space-y-4">
+                  <div
+                    className="border-2 border-dashed border-outline-variant bg-surface-container-lowest p-6 text-center hover:border-primary transition-colors cursor-pointer"
+                    onClick={() => document.getElementById("upload-input-files")?.click()}
+                  >
+                    <Upload size={28} className="mx-auto text-outline mb-2" />
+                    <p className="text-[14px] font-semibold text-on-surface mb-1">Drop files here or click to browse</p>
+                    <p className="text-[11px] text-on-surface-variant">Supports up to 20,000 files. For larger datasets, use cURL or Python.</p>
+                  </div>
+                  <input
+                    type="file"
+                    multiple
+                    id="upload-input-files"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files; if (f) addFilesToQueue(f); e.target.value = ""; }}
+                  />
+                  <input
+                    type="file"
+                    id="upload-input-folder"
+                    className="hidden"
+                    // @ts-ignore
+                    webkitdirectory=""
+                    onChange={(e) => { const f = e.target.files; if (f) addFilesToQueue(f, true); e.target.value = ""; }}
+                  />
+                  <div className="flex gap-2">
+                    <label htmlFor="upload-input-files" className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container transition-colors text-[12px] font-bold cursor-pointer">
+                      <Upload size={14} /> Select Files
+                    </label>
+                    <label htmlFor="upload-input-folder" className="inline-flex items-center gap-2 px-4 py-2 border border-outline-variant hover:bg-surface-container-low transition-colors text-[12px] font-bold cursor-pointer">
+                      <Folder size={14} /> Select Folder
+                    </label>
+                  </div>
+
+                  {/* Upload Queue */}
+                  {fileQueue.length > 0 && (
+                    <div className="border border-outline-variant divide-y divide-outline-variant max-h-48 overflow-y-auto">
+                      <div className="flex items-center justify-between px-3 py-2 bg-surface-container-low text-[11px] font-bold text-outline uppercase tracking-wider">
+                        <span>Files ({fileQueue.length})</span>
+                        <span>
+                          {fileQueue.filter((e) => e.status === "success").length} done
+                          {isUploading && ` · ${fileQueue.filter((e) => e.status === "uploading").length} uploading`}
+                        </span>
+                      </div>
+                      {fileQueue.map((entry, i) => (
+                        <div key={i} className="flex items-center gap-3 px-3 py-2 text-[12px]">
+                          {entry.status === "queued" && <div className="w-3 h-3 rounded-full border border-outline-variant shrink-0" />}
+                          {entry.status === "uploading" && <Loader2 size={12} className="animate-spin text-primary shrink-0" />}
+                          {entry.status === "success" && <div className="w-3 h-3 rounded-full bg-tertiary shrink-0" />}
+                          {entry.status === "failed" && <div className="w-3 h-3 rounded-full bg-error shrink-0" />}
+                          <span className="text-on-surface truncate flex-1">{entry.key}</span>
+                          <span className={clsx(
+                            "text-[10px] font-semibold shrink-0",
+                            entry.status === "queued" && "text-on-surface-variant",
+                            entry.status === "uploading" && "text-primary",
+                            entry.status === "success" && "text-tertiary",
+                            entry.status === "failed" && "text-error",
+                          )}>
+                            {entry.status === "queued" && "Queued"}
+                            {entry.status === "uploading" && "Uploading"}
+                            {entry.status === "success" && "Success"}
+                            {entry.status === "failed" && "Failed"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {fileQueue.length > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={processQueue}
+                        disabled={isUploading}
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container disabled:opacity-40 transition-colors text-[12px] font-bold"
+                      >
+                        {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        {isUploading ? "Uploading..." : "Upload All"}
+                      </button>
+                      {!isUploading && (
+                        <button onClick={() => { setFileQueue([]); setUploadTarget(null); }} className="px-4 py-2 border border-outline-variant hover:bg-surface-container-low transition-colors text-[12px] font-bold text-on-surface">
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {uploadTab === "curl" && (
+                <div className="space-y-3">
+                  <p className="text-[12px] text-on-surface-variant">Upload files using cURL:</p>
+                  <pre className="bg-surface-container-low border border-outline-variant p-4 text-[12px] font-mono text-on-surface overflow-x-auto whitespace-pre-wrap">
+{`curl -X PUT \\
+  http://localhost:3000/api/s3/${uploadTarget.id}/your-file.jpg \\
+  -H "Content-Type: image/jpeg" \\
+  --data-binary @your-file.jpg`}
+                  </pre>
+                </div>
+              )}
+              {uploadTab === "python" && (
+                <div className="space-y-3">
+                  <p className="text-[12px] text-on-surface-variant">Upload files using Python:</p>
+                  <pre className="bg-surface-container-low border border-outline-variant p-4 text-[12px] font-mono text-on-surface overflow-x-auto whitespace-pre-wrap">
+{`import requests
+
+url = "http://localhost:3000/api/s3/${uploadTarget.id}/your-file.jpg"
+headers = {"Content-Type": "image/jpeg"}
+
+with open("your-file.jpg", "rb") as f:
+    resp = requests.put(url, data=f, headers=headers)
+
+print(resp.status_code)`}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end px-6 py-4 border-t border-outline-variant">
+              <button
+                onClick={closeUpload}
+                disabled={isUploading}
+                className="px-4 py-2 border border-outline-variant hover:bg-surface-container-low disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[12px] font-bold text-on-surface"
+              >
+                {isUploading ? "Upload in progress..." : "Close"}
               </button>
             </div>
           </div>

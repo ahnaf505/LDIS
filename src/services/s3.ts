@@ -1,4 +1,4 @@
-import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { config } from "../config";
 
 export const s3Client = new S3Client({
@@ -27,5 +27,14 @@ export function listS3Bucket(bucket: string, continuationToken?: string, maxKeys
     Bucket: bucket,
     ContinuationToken: continuationToken,
     MaxKeys: maxKeys,
+  }));
+}
+
+export function putS3Object(bucket: string, key: string, body: Buffer, contentType: string) {
+  return s3Client.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
   }));
 }

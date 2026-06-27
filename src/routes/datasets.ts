@@ -7,4 +7,5 @@ export const datasetsRouter = Router();
 datasetsRouter.get("/", requireEncryptionKeys, DatasetsController.list);
 datasetsRouter.post("/", DatasetsController.create);
 datasetsRouter.get("/:bucket/files", DatasetsController.files);
+datasetsRouter.post("/:bucket/sync-count", DatasetsController.syncCount);
 datasetsRouter.delete("/:id", DatasetsController.delete);

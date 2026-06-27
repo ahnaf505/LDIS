@@ -2,47 +2,19 @@
 
 **LDIS** is a high-performance, secure web application designed to query, inspect, and preview large OCR datasets. It integrates **Elasticsearch** for indexing and searching document structures/text, and uses **S3-compatible object storage** (such as **RustFS** or MinIO) for dynamic asset retrieval.
 
-To ensure compliance with strict data confidentiality requirements, LDIS incorporates application-level end-to-end (E2E) double-layer encryption, preventing network leakage even on compromised networks (e.g., active Man-in-the-Middle proxies with broken SSL).
+LDIS uses application-level E2E double-layer encryption to satisfy strict data confidentiality requirements, protecting against network leakage and making programmatic interception substantially harder — even on compromised networks.
 
 ---
 
 ## Key Features
 
 - **High-Speed OCR Search**: Query millions of document text lines instantly using Elasticsearch-powered contains searches.
-- **Dataset (Index) Management**: Monitor dataset loading progress, inspect file formats (ZIPs, folders), document counts, and track creation dates.
 - **Dynamic S3 Bucket Mapping**: Maps dataset indexes dynamically to S3 storage buckets retrieved from metadata configurations.
 - **Double-Layer E2E Encryption**:
   - Request queries, search responses, document details, and image streams are encrypted twice sequentially using `AES-256-CBC`.
-  - Temporary symmetric key sets are generated dynamically on the client via WebCrypto and never stored on the server. Keys are split between header parameters (`X-Key-2`) and query strings (`?k1=...`) to prevent extraction.
+  - Temporary symmetric key sets are generated dynamically on the client via WebCrypto and never stored on the server.
 - **Zero-Storage secure streaming**: S3 assets are buffered in memory and encrypted on-the-fly, leaving no temporary folders or files on the server disk.
-- **Canvas-Based Rendering**: Decrypted documents are rendered directly to HTML5 `<canvas>` elements with pointer-event locks. Object URLs are immediately revoked to block casual local scraping and image saving.
-- **Strict Referrer Policy**: Applies global `no-referrer` rules in headers and meta-tags to prevent leaking plaintext search queries inside the HTTP headers of outgoing asset requests.
-
----
-
-## Architecture Overview
-
-```
-                  +--------------------------------+
-                  |         LDIS Frontend          |
-                  |  (React, TypeScript, Canvas)   |
-                  +--------------------------------+
-                             |          ^
-         1. Send E2E Keys    |          | 4. Return Double-Encrypted
-            & Encrypted Query|          |    Binary Octet-Stream
-                             v          |
-                  +--------------------------------+
-                  |          LDIS Server           |
-                  |     (Express, Node Crypto)     |
-                  +--------------------------------+
-                     |                          |
-   2. Decrypt Query  |                          | 3. Retrieve Object
-   & Query Metadata  v                          v
-      +--------------------+              +--------------------+
-      |   Elasticsearch    |              |  S3/RustFS Storage |
-      |   (Search/Docs)    |              | (Secure Document)  |
-      +--------------------+              +--------------------+
-```
+- **Canvas-Based Rendering**: Decrypted documents are rendered directly to HTML5 `<canvas>` elements with pointer-event locks. Object URLs are immediately revoked to block casual local scraping and image saving, Though screenshots are still possible.
 
 ---
 

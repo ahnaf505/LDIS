@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { MainLayout } from "./layouts/MainLayout";
 
 const BatchesView = lazy(() => import("./views/BatchesView").then((module) => ({ default: module.BatchesView })));
+const DatasetBrowseView = lazy(() => import("./views/DatasetBrowseView").then((module) => ({ default: module.DatasetBrowseView })));
 const SearchView = lazy(() => import("./views/SearchView").then((module) => ({ default: module.SearchView })));
 const HistoryView = lazy(() => import("./views/HistoryView").then((module) => ({ default: module.HistoryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then((module) => ({ default: module.SettingsView })));
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Navigate to="/search" replace />} />
             <Route path="batches" element={<BatchesView />} />
+            <Route path="batches/:bucket" element={<DatasetBrowseView />} />
             <Route path="search" element={<SearchView />} />
             <Route path="history" element={<HistoryView />} />
             <Route path="settings" element={<SettingsView />} />

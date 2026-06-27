@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { FileArchive, Folder, FolderX, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { FileArchive, Folder, FolderX, Upload, Download, ChevronLeft, ChevronRight, Eye, Database, Trash2, Loader2, Plus, X } from "lucide-react";
 import clsx from "clsx";
 import { Link } from "react-router-dom";
 
@@ -20,6 +20,10 @@ type Dataset = {
   type: string;
 };
 
+function sanitizeName(name: string) {
+  return name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
 function buf2hex(buffer: ArrayBuffer) {
   return Array.prototype.map.call(new Uint8Array(buffer), (x) => ("00" + x.toString(16)).slice(-2)).join("");
 }
@@ -35,6 +39,26 @@ export function BatchesView() {
   const [inputCode, setInputCode] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // New Dataset Modal States
+  const [showNewDataset, setShowNewDataset] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!createError) return;
+    const t = setTimeout(() => setCreateError(null), 6000);
+    return () => clearTimeout(t);
+  }, [createError]);
+
+  const openNewDataset = () => {
+    setNewName("");
+    setNewDescription("");
+    setShowNewDataset(true);
+    setTimeout(() => firstInputRef.current?.focus(), 50);
+  };
 
   useEffect(() => {
     async function loadDatasets() {
@@ -112,6 +136,38 @@ export function BatchesView() {
     }
   };
 
+  const handleCreateDataset = async () => {
+    if (!newName.trim()) return;
+
+    try {
+      const response = await fetch("/api/datasets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), description: newDescription.trim() }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.error || "Failed to create dataset");
+      }
+
+      const created = await response.json();
+      setDatasets((prev) => [...prev, {
+        id: created.id,
+        name: created.name,
+        status: "active",
+        progress: 100,
+        docs: 0,
+        initiatedBy: { initials: "ME", name: "Me", color: "#3B82F6" },
+        date: new Date().toISOString().split("T")[0],
+        type: "folder",
+      }]);
+      setShowNewDataset(false);
+    } catch (err: any) {
+      setCreateError(err.message || "An error occurred.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-end mb-6">
@@ -119,6 +175,10 @@ export function BatchesView() {
           <h2 className="font-headline-lg text-[24px] font-bold text-on-surface">Datasets</h2>
           <p className="font-body-sm text-[12px] text-on-surface-variant mt-1">Manage and monitor document processing jobs.</p>
         </div>
+        <button onClick={openNewDataset} className="flex items-center gap-2 bg-primary text-on-primary px-4 py-1.5 rounded-none font-headline-md text-[14px] hover:bg-primary-container hover:text-on-primary-container transition-colors shadow-sm whitespace-nowrap">
+          <Plus size={16} />
+          New Dataset
+        </button>
       </div>
 
       <div className="bg-surface-container-lowest border border-outline-variant rounded-none overflow-hidden shadow-sm flex flex-col flex-1">
@@ -160,13 +220,14 @@ export function BatchesView() {
                         {batch.type === "zip" && <FileArchive size={18} className="text-outline" />}
                         {batch.type === "folder" && <Folder size={18} className="text-outline" />}
                         {batch.type === "folder_off" && <FolderX size={18} className="text-outline" />}
-                        <Link to={`/search?q=&index=${batch.id}`} className="hover:underline">{batch.name}</Link>
+                        <Link to={`/batches/${batch.id}`} className="hover:underline">{batch.name}</Link>
                       </div>
                     </td>
                     <td className="px-4 py-2 font-code-sm text-[12px] text-on-surface-variant tabular-nums">{batch.docs.toLocaleString()}</td>
                     <td className="px-4 py-2 font-code-sm text-[12px] text-on-surface-variant">{batch.date}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-1">
+                        <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Upload"><Upload size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Download"><Download size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="View"><Eye size={18} /></button>
                         <button className="p-1 rounded-none text-outline hover:text-primary hover:bg-primary-fixed transition-colors" title="Data Details"><Database size={18} /></button>
@@ -244,6 +305,85 @@ export function BatchesView() {
               >
                 {isDeleting && <Loader2 size={14} className="animate-spin" />}
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* New Dataset Modal */}
+      {showNewDataset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-surface border border-outline-variant w-full max-w-lg shadow-xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
+              <div>
+                <h3 className="font-headline-lg text-[18px] font-bold text-on-surface">New Dataset</h3>
+                <p className="text-[12px] text-on-surface-variant mt-0.5">Register a new Elasticsearch index as a dataset.</p>
+              </div>
+              <button onClick={() => setShowNewDataset(false)} className="p-1.5 hover:bg-surface-container-high rounded-none text-outline transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-outline uppercase tracking-wider block">Name <span className="text-error">*</span></label>
+                <input
+                  ref={firstInputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. TLEAK Batch 1"
+                    className="w-full px-3 py-2 border border-outline-variant bg-surface-container-lowest rounded-none focus:outline-none focus:border-primary text-[14px]"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-outline uppercase tracking-wider block">Index Key</label>
+                <input
+                  type="text"
+                  value={sanitizeName(newName)}
+                  readOnly
+                  placeholder="auto-generated from name"
+                  className="w-full px-3 py-2 border border-outline-variant bg-surface-container-low text-on-surface-variant rounded-none text-[14px] cursor-default"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-outline uppercase tracking-wider block">Description <span className="text-on-surface-variant font-normal normal-case tracking-normal">(optional)</span></label>
+                <textarea
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Brief description of this dataset..."
+                  className="w-full px-3 py-2 border border-outline-variant bg-surface-container-lowest rounded-none focus:outline-none focus:border-primary text-[14px] resize-none"
+                />
+              </div>
+            </div>
+
+            {createError && (
+              <div className="mx-6 mb-2 flex items-start gap-2 bg-error-container/20 border border-error/40 px-4 py-3">
+                <span className="text-error text-[13px] font-semibold shrink-0 mt-0.5">!</span>
+                <p className="text-[12px] text-on-surface flex-1">{createError}</p>
+                <button onClick={() => setCreateError(null)} className="text-outline hover:text-on-surface p-0.5">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex gap-2 justify-end px-6 py-4 border-t border-outline-variant">
+              <button
+                onClick={() => setShowNewDataset(false)}
+                className="px-4 py-2 border border-outline-variant hover:bg-surface-container-low transition-colors text-[12px] font-bold text-on-surface"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!newName.trim()}
+                onClick={handleCreateDataset}
+                className="px-4 py-2 bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container disabled:opacity-40 transition-colors text-[12px] font-bold"
+              >
+                Create Dataset
               </button>
             </div>
           </div>

@@ -8,7 +8,7 @@ import { errorHandler } from "./middleware/errorHandler";
 import { config } from "./config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, "..");
+const rootDir = path.resolve(__dirname, "..", "..");
 const isProduction = process.env.NODE_ENV === "production" || process.argv.includes("--production");
 
 async function createServer() {

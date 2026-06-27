@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server/index.ts",
+    "dev": "tsx src/server/index.ts",
     "build": "vite build",
-    "preview": "npm run build && tsx server/index.ts --production",
-    "start": "tsx server/index.ts --production",
+    "preview": "npm run build && tsx src/server/index.ts --production",
+    "start": "tsx src/server/index.ts --production",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },

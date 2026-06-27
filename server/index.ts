@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
-import { createApp, errorHandler } from "./app";
+import { createApp } from "./app";
+import { errorHandler } from "./middleware/errorHandler";
 import { config } from "./config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
